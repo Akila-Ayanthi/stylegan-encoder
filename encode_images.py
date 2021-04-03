@@ -123,8 +123,9 @@ def main():
     if (args.use_lpips_loss > 0.00000001):
         with dnnlib.util.open_url('https://drive.google.com/uc?id=1N2-m9qszOeVC9Tq77WxsLnuWwOedQiD2', cache_dir=config.cache_dir) as f:
             perc_model =  pickle.load(f)
-    perceptual_model = PerceptualModel(args, perc_model=perc_model, batch_size=args.batch_size)
+    perceptual_model = PerceptualModel(args, perc_model=perc_model, batch_size=args.batch_size, use_optimizer=args.optimizer)
     perceptual_model.build_perceptual_model(generator, discriminator_network)
+    perceptual_model.init_optimizer(generator.dlatent_variable, iterations=args.iterations)
 
     ff_model = None
 
@@ -164,7 +165,8 @@ def main():
                     dlatents = ff_model.predict(load_images(images_batch,image_size=args.resnet_image_size))
         if dlatents is not None:
             generator.set_dlatents(dlatents)
-        op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, use_optimizer=args.optimizer)
+        # op = perceptual_model.optimize(generator.dlatent_variable, iterations=args.iterations, use_optimizer=args.optimizer)
+        op = perceptual_model.run_optimizer(iterations=args.iterations)
         pbar = tqdm(op, leave=False, total=args.iterations)
         vid_count = 0
         best_loss = None
