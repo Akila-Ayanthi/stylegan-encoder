@@ -60,7 +60,7 @@ def unpack_bz2(src_path):
     return dst_path
 
 class PerceptualModel:
-    def __init__(self, args, batch_size=1, perc_model=None, sess=None):
+    def __init__(self, args, batch_size=1, perc_model=None, sess=None, use_optimizer='adam'):
         self.sess = tf.get_default_session() if sess is None else sess
         K.set_session(self.sess)
         self.epsilon = 0.00000001
@@ -91,6 +91,7 @@ class PerceptualModel:
         self.adaptive_loss = args.use_adaptive_loss
         self.sharpen_input = args.sharpen_input
         self.batch_size = batch_size
+        self.use_optimizer = use_optimizer
         if perc_model is not None and self.lpips_loss is not None:
             self.perc_model = perc_model
         else:
@@ -280,27 +281,29 @@ class PerceptualModel:
             self.assign_placeholder("ref_img_features", image_features)
         self.assign_placeholder("ref_weight", image_mask)
         self.assign_placeholder("ref_img", loaded_image)
+                
+    def init_optimizer(self, vars_to_optimize, iterations=200):
+        self.vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
 
-    def optimize(self, vars_to_optimize, iterations=200, use_optimizer='adam'):
-        vars_to_optimize = vars_to_optimize if isinstance(vars_to_optimize, list) else [vars_to_optimize]
-        if use_optimizer == 'lbfgs':
-            optimizer = tf.contrib.opt.ScipyOptimizerInterface(self.loss, var_list=vars_to_optimize, method='L-BFGS-B', options={'maxiter': iterations})
+        if self.use_optimizer == 'lbfgs':
+            self.optimizer = tf.contrib.opt.ScipyOptimizerInterface(
+                self.loss, var_list=self.vars_to_optimize, method='L-BFGS-B', options={'maxiter': iterations})
         else:
-            if use_optimizer == 'ggt':
-                optimizer = tf.contrib.opt.GGTOptimizer(learning_rate=self.learning_rate)
+            if self.use_optimizer == 'ggt':
+                self.optimizer = tf.contrib.opt.GGTOptimizer(learning_rate=self.learning_rate)
             else:
-                optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
-            min_op = optimizer.minimize(self.loss, var_list=[vars_to_optimize])
-            self.sess.run(tf.variables_initializer(optimizer.variables()))
-            fetch_ops = [min_op, self.loss, self.learning_rate]
-        #min_op = optimizer.minimize(self.sess)
-        #optim_results = tfp.optimizer.lbfgs_minimize(make_val_and_grad_fn(get_loss), initial_position=vars_to_optimize, num_correction_pairs=10, tolerance=1e-8)
+                self.optimizer = tf.train.AdamOptimizer(learning_rate=self.learning_rate)
+            min_op = self.optimizer.minimize(self.loss, var_list=[self.vars_to_optimize])
+            self.sess.run(tf.variables_initializer(self.optimizer.variables()))
+            self.fetch_ops = [min_op, self.loss, self.learning_rate]
+
         self.sess.run(self._reset_global_step)
-        #self.sess.graph.finalize()  # Graph is read-only after this statement.
+
+    def run_optimizer(self, iterations=200):
         for _ in range(iterations):
-            if use_optimizer == 'lbfgs':
-                optimizer.minimize(self.sess, fetches=[vars_to_optimize, self.loss])
-                yield {"loss":self.loss.eval()}
+            if self.use_optimizer == 'lbfgs':
+                self.optimizer.minimize(self.sess, fetches=[self.vars_to_optimize, self.loss])
+                yield {"loss": self.loss.eval()}
             else:
-                _, loss, lr = self.sess.run(fetch_ops)
-                yield {"loss":loss,"lr":lr}
+                _, loss, lr = self.sess.run(self.fetch_ops)
+                yield {"loss": loss, "lr": lr}
