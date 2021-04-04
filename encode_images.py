@@ -73,7 +73,22 @@ def main():
       import cv2
       synthesis_kwargs = dict(output_transform=dict(func=tflib.convert_images_to_uint8, nchw_to_nhwc=False), minibatch_size=args.batch_size)
 
-    ref_images = [os.path.join(args.src_dir, x) for x in os.listdir(args.src_dir)]
+    ref_image_new=[]
+    encoded_image_new=[]
+    f_ref_images=[]
+    encoded_images = os.listdir(args.dlatent_dir)
+    print(args.src_dir)
+    ref_images = os.listdir(args.src_dir)
+    for ref_image in ref_images:
+        ref_image_new.append(ref_image.split('.')[0])
+    for encoded_image in encoded_images:
+        encoded_image_new.append(encoded_image.split('.')[0])
+        
+    u_ref_images = [x for x in ref_image_new if x not in encoded_image_new]
+    for u_ref_image in u_ref_images:
+        f_ref_images.append(u_ref_image+".png")
+        
+    ref_images = [os.path.join(args.src_dir, x) for x in f_ref_images]
     ref_images = list(filter(os.path.isfile, ref_images))
 
     if len(ref_images) == 0:
